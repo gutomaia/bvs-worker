@@ -1,0 +1,7 @@
+---
+
+applications:
+- name:      BvS-Worker
+  buildpack: https://github.com/cloudfoundry/python-buildpack
+  no-route: true
+  command: python bvs.py
