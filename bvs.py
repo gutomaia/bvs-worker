@@ -1,4 +1,5 @@
 import os.path
+from multiprocessing import Pool
 from tweepy.streaming import StreamListener
 from tweepy import OAuthHandler
 from tweepy import Stream
@@ -25,22 +26,24 @@ hashtag = 'BvS'
 
 def notify_score():
     print'notify_score'
-    positive = r.get('positive')
-    negative = r.get('negative')
-    neutral = r.get('neutral')
-    error = r.get('error')
-    data = dict(
-        positive=positive,
-        negative=negative,
-        neutral=neutral,
-        error=error
-    )
-    dump = json.dumps(data)
-    print dump
-    r.publish('score', dump)
 
+    pipe = r.pipeline()
+    keys = ['positive', 'negative', 'neutral', 'error']
+    for key in keys:
+        pipe.get(key)
+    values = pipe.execute()
+
+    data = dict(zip(keys, values))
+
+    r.publish('score', json.dumps(data))
+
+def notify_opinion(tweet):
+    print 'notify_opinion', tweet
+    r.publish('opinion', json.dumps(tweet))
 
 def opinion(tweet, api_key=False, hashtag=hashtag):
+    if not api_key:
+        return
 
     url = 'http://access.alchemyapi.com/calls/text/TextGetTargetedSentiment'
 
@@ -56,11 +59,10 @@ def opinion(tweet, api_key=False, hashtag=hashtag):
     res = post(url, params=params, data=data)
 
     if res.status_code == 200:
-        opinion = res.json()
-        print 'opinion', opinion
-        if opinion['status'] == 'OK':
-            tweet['status'] = opinion['docSentiment']['type']
-        elif opinion['status'] == 'ERROR':
+        o = res.json()
+        if o['status'] == 'OK':
+            tweet['status'] = o['docSentiment']['type']
+        elif o['status'] == 'ERROR':
             tweet['status'] = 'error'
 
     if 'status' not in tweet:
@@ -68,9 +70,35 @@ def opinion(tweet, api_key=False, hashtag=hashtag):
 
     r.incr(tweet['status'])
     print 'status', tweet['id'], tweet['status']
+
+    notify_opinion(tweet)
     notify_score()
+    return tweet
+
+def new_tweet(data):
+    dump = json.dumps(data)
+
+    pipe = r.pipeline()
+    pipe.lpush('tweets', dump)
+    pipe.ltrim('tweets', 0, 99);
+    pipe.publish('tweet', dump)
+    pipe.execute()
+
+def update_db(tweet):
+    print 'update_db', tweet
+    pipe = r.pipeline()
+    pipe.watch('tweets')
+    tweets = pipe.lrange('tweets', 0, 99)
+    pipe.multi()
+    for i, t in enumerate(tweets):
+        data = json.loads(t)
+        if data['id'] == tweet['id']:
+            pipe.lset('tweets', i, json.dumps(tweet))
+            break
+    pipe.execute()
 
 
+pool = Pool(30)
 
 class TweetListener(StreamListener):
 
@@ -88,17 +116,11 @@ class TweetListener(StreamListener):
             msg = tweet['text'],
             timestamp = tweet['timestamp_ms'],
         )
+        print 'tweet', data
 
-        opinion(data, self.alchemy_api_key)
+        pool.apply_async(opinion, args=(data, self.alchemy_api_key), callback=update_db)
 
-        print data
-
-        dump = json.dumps(data)
-
-        r.lpush('tweets', dump)
-        r.ltrim('tweets', 0, 99);
-        r.publish('tweet', dump)
-
+        new_tweet(data)
         return True
 
     def on_error(self, status):
