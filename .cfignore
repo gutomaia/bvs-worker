@@ -1,3 +1,7 @@
-development.ini
 *.pyc
+.checkpoint/
+Makefile
+bvs/tests/
+development.ini
+python.mk
 venv/
