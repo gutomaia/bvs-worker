@@ -1,3 +1,4 @@
+from __future__ import absolute_import
 from unittest import TestCase
 from mock import patch
 from fakeredis import FakeStrictRedis
@@ -16,13 +17,8 @@ class TweetTest(TestCase):
 
 
     def setUp(self):
-        self.redis = FakeStrictRedis()
-
-        self.redis_patcher = patch('bvs.database.StrictRedis')
-
-        self.redis_mock = self.redis_patcher.start()
-        self.redis_mock.return_value = self.redis
-
+        self.redis_patcher = patch('bvs.twitter.db', new_callable=FakeStrictRedis)
+        self.redis = self.redis_patcher.start()
 
     def tearDown(self):
         self.redis.flushall()

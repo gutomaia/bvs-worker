@@ -1,5 +1,4 @@
 from redis import StrictRedis
-from fakeredis import FakeStrictRedis
 
 
 from os import environ as env
@@ -16,7 +15,4 @@ else:
     password = None
 
 
-# TODO:
-# db = StrictRedis(host=host, port=port, password=password, db=0)
-
-db = FakeStrictRedis(host=host, port=port, password=password, db=0)
+db = StrictRedis(host=host, port=port, password=password, db=0)

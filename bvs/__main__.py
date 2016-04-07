@@ -1,7 +1,7 @@
 from os import environ as env
 import os
 
-from bvs import TweetListener
+from bvs.twitter import TweetListener
 from tweepy import OAuthHandler
 from tweepy import Stream
 
